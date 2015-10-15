@@ -1,0 +1,117 @@
+--------------------------------------------------------------
+Preparations
+--------------------------------------------------------------
+1) copy folder 'table' and rename to 'la_table'
+(Path: \app\panels)
+
+2) inside 'la_table' put 'jsonview' plugin to path ./lib/jsonview
+
+3) Open Kibana config.js and add new panel to "panel_names" array:
+'la_table',
+(Path: \config.js)
+
+4) for IIS create web.config in root folder and configure extensions .json and .woff
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <system.webServer>
+        <staticContent>
+            <mimeMap fileExtension=".json" mimeType="application/x-javascript" />
+            <mimeMap fileExtension=".woff" mimeType="application/x-woff" />
+        </staticContent>
+    </system.webServer>
+</configuration>
+
+
+--------------------------------------------------------------
+module.html
+--------------------------------------------------------------
+
+1) change ng-controller='la_table'
+
+2) replace path /panels/table/ to /panels/la_table/
+
+3) add new menu LA Message near text "View:" (by analogy with ng-click="event.kibana.view = 'table'")
+ 
+<a class="link" ng-class="{'strong':event.kibana.view == 'la_message'}" ng-click="event.kibana.view = 'la_message'">LA Message</a> /
+
+4) add container for LA Message (by analogy with ng-switch-when="json" and ng-switch-when="raw")
+                <div style="white-space:pre-wrap;word-wrap:break-word;border-top: 1px solid #aaa;padding-top: 8px;" bo-html="without_kibana(event)|tableLaJson:2:$index" ng-switch-when="la_message">
+                  <div class="laJsonView" style="background-color:#fff;color:#000"></div>
+                </div>
+
+--------------------------------------------------------------
+module.js
+--------------------------------------------------------------
+
+1) Carefully replace table to la_table
+(use match whole word and case to find 'table')
+
+2) Set default view to la_message:
+row.kibana.view = row.kibana.view || 'la_message';
+(inside $scope.toggle_details = function(row) {)
+
+3) Add function to display and hightlight LA Message:
+At the end of main function, before closing braces "});"
+  //------------------------------
+  module.filter('tableLaJson', function() {
+    var json;
+    return function(text,prettyLevel,index) {
+      if (!_.isUndefined(text) && !_.isNull(text) && text.toString().length > 0) {
+        
+        // Check if Message contains JSON
+        var looksLikeJson = false;
+        
+        if (text._source.message.length > 0 && text._source.message[0] === "{") {
+          looksLikeJson = true;
+        }
+        else {
+          var tmpInd = text._source.message.indexOf("\r\n{");
+          if (tmpInd !== -1) {
+            looksLikeJson = true;
+          }
+        }
+        
+        if (looksLikeJson) {
+            // Display JSON message with interactive plugin
+            var $laJsonView = $(".table-doc-table table>tbody").eq(index).find(".laJsonView");
+            var tmpJsonString = text._source.message.substr(tmpInd);
+            
+            if (IsJsonString(tmpJsonString)) {
+              $laJsonView.JSONView(tmpJsonString).JSONView('toggle', 4);
+            return;
+          }
+        }
+        
+        // Message is not JSON, so just display it as is
+        text = text._source.message;
+        
+        return text.toString().
+          replace(/&/g, '&amp;').
+          replace(/</g, '&lt;').
+          replace(/>/g, '&gt;').
+          replace(/(https?\:\/\/[\w\.\/\?\=\&\%\#\-\:\;]+)/g, '<a href="$1">$1</a>').
+          replace(/\r?\n/g, '<br/>').
+          replace(/@start-highlight@/g, '<code class="highlight">').
+          replace(/@end-highlight@/g, '</code>');
+        
+      }
+      return '';
+    };
+  });
+  
+  function IsJsonString(str) {
+    try {
+        JSON.parse(str);
+    } catch (e) {
+        return false;
+    }
+    return true;
+  }
+  //------------------------------
+  
+
+4) Include Plugin 'JsonView' to 'define' section at the top:
+   Note: plugin should be placed to folder 'lib' inside folder 'la_table'
+
+  './lib/jsonview/jquery.jsonview',
+  'css!./lib/jsonview/jquery.jsonview.css',
